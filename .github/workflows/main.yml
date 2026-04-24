@@ -35,11 +35,11 @@ jobs:
           curl -L "https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite" -o assets/models/crop_doctor.tflite
           curl -L "https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite" -o assets/models/health_scan.tflite
 
-      - name: Build Native 1-bit Kernels (Prism-LM Optimized)
+      - name: Build Native 1-bit Kernels (Prism-ML Optimized)
         run: |
-          # Use specific Prism-LLM/llama.cpp fork for 1-bit b1.58 quantization support
-          # This fork includes the high-performance ternary kernels for ARM
-          git clone --recursive https://github.com/Prism-LLM/llama.cpp.git
+          # Use specific PrismML-Eng/llama.cpp fork for 1-bit b1.58 quantization support
+          # This fork contains the high-performance ternary kernels specifically for Bonsai
+          git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp.git
           cd llama.cpp
           
           # Build specialized native libraries for ARMv7 and ARM64
