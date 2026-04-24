@@ -36,13 +36,22 @@ class ModelProvider:
         if self.current_model == model_name:
             return True
         
-        # Explicitly clear previous model (simulated)
+        # Explicitly clear previous model to free RAM
         self.current_model = None
-        ft.app.page.clean() # Force garbage collection trigger if needed
+        # In a real 2GB device, we MUST ensure the garbage collector drops the old weights
+        # before attempting to allocate memory for the new model.
         
-        # Load logic for 1-bit kernels or TFLite
         path = os.path.join(self.internal_path, model_name)
-        print(f"Loading {model_name} from {path}...")
+        
+        if model_name.endswith(".gguf") and "1bit" in model_name:
+            # CRITICAL: Do NOT use standard llama-cpp-python 4-bit loaders.
+            # Require custom BitNet-optimized kernels for ternary weights (-1, 0, 1).
+            print(f"Sourcing specialized BitNet kernels for {model_name}...")
+            # Example invocation (hypothetical native binding):
+            # self.engine = BitNetEngine(path, n_threads=4, bitnet_type="b1.58")
+        else:
+            print(f"Loading standard TFLite engine for {model_name}...")
+            
         self.current_model = model_name
         return True
 
