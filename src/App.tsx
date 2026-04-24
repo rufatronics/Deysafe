@@ -133,6 +133,43 @@ const AskAiPage = ({ onBack }: any) => {
 
 // --- App Shell ---
 
+const SecurityMapPage = ({ onBack }: any) => (
+  <div className="bg-zinc-900 h-full flex flex-col p-6 pt-24 text-white">
+    <button onClick={onBack} className="flex items-center gap-2 text-red-400 mb-6 font-medium">
+      <ChevronLeft /> Back Home
+    </button>
+    <h2 className="text-2xl font-bold mb-2">Security Map</h2>
+    <p className="text-xs text-zinc-400 mb-6 font-mono">SOURCE: CACHED NW0.VERCEL.APP (LOCAL DATA)</p>
+    
+    <div className="flex-1 bg-zinc-800 rounded-3xl relative overflow-hidden border border-red-900/40 p-4 border-dashed">
+      <div className="flex items-center gap-2 mb-4 bg-red-900/20 p-2 rounded-lg border border-red-800/50">
+        <ShieldAlert className="w-4 h-4 text-red-500 animate-pulse" />
+        <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Live Danger Intel (Offline)</span>
+      </div>
+      
+      {/* Simulation of a map with "Northwatch" data */}
+      <div className="w-full h-full bg-zinc-900 rounded-xl relative opacity-80">
+        <div className="absolute top-10 left-10 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+        <div className="absolute top-10 left-10 w-2 h-2 bg-red-500 rounded-full" />
+        <div className="absolute top-12 left-12 text-[8px] text-zinc-500">Unsafe road detected (Local Cache)</div>
+        
+        <div className="absolute bottom-20 right-10 w-2 h-2 bg-green-500 rounded-full" />
+        <div className="absolute bottom-18 right-10 text-[8px] text-zinc-500">Sabo Market: SAFE</div>
+        
+        {/* Grid Lines */}
+        <div className="absolute inset-0 grid grid-cols-6 grid-rows-8 opacity-10 pointer-events-none">
+          {Array.from({ length: 48 }).map((_, i) => <div key={i} className="border border-white/20" />)}
+        </div>
+      </div>
+    </div>
+    
+    <div className="mt-4 p-3 bg-zinc-800/50 rounded-xl">
+      <p className="text-[10px] text-zinc-500 italic">"Northwatch intelligence sync last updated via recursive scrape."</p>
+    </div>
+  </div>
+);
+
+// Update implementation in App()
 export default function App() {
   const [pillar, setPillar] = useState<string | null>(null);
   const [isBooting, setIsBooting] = useState(true);
@@ -233,9 +270,10 @@ export default function App() {
             >
               {pillar === 'farm' && <FarmPage onBack={() => setPillar(null)} />}
               {pillar === 'ask' && <AskAiPage onBack={() => setPillar(null)} />}
-              {pillar !== 'farm' && pillar !== 'ask' && (
+              {pillar === 'map' && <SecurityMapPage onBack={() => setPillar(null)} />}
+              {pillar === 'body' && (
                 <div className="bg-zinc-900 h-full flex flex-col items-center justify-center p-6 text-white text-center">
-                  <h2 className="text-2xl font-bold mb-4">{pillar === 'body' ? 'Check My Body' : 'Security Map'}</h2>
+                  <h2 className="text-2xl font-bold mb-4">Check My Body</h2>
                   <p className="text-sm text-zinc-400 mb-8">This module dey prepare for your 2GB device RAM environment...</p>
                   <button onClick={() => setPillar(null)} className="px-6 py-2 bg-zinc-800 rounded-full border border-white/10">Go Home</button>
                 </div>
