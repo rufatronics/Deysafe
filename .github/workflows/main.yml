@@ -1,0 +1,55 @@
+name: Deysafe AI Build Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install flet
+
+      - name: Set up Android NDK (r25c)
+        uses: n0rt3n/setup-ndk@v1
+        with:
+          ndk-version: r25c
+          add-to-path: true
+
+      - name: Model Fetching (Hugging Face)
+        run: |
+          mkdir -p assets/models
+          curl -L "https://huggingface.co/rufatronics/nigerian_nlu/resolve/main/bonsai_1.7b_1bit.gguf" -o assets/models/bonsai_1.7b_1bit.gguf
+          curl -L "https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite" -o assets/models/crop_doctor.tflite
+          curl -L "https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite" -o assets/models/health_scan.tflite
+
+      - name: Northwatch Intelligence Scrape (Offline WebView)
+        run: |
+          mkdir -p assets/www
+          wget --mirror --convert-links --adjust-extension --page-requisites --no-parent https://nw0.vercel.app -P assets/www/
+
+      - name: Native Bundling (NDK libs)
+        run: |
+          mkdir -p jniLibs/armeabi-v7a jniLibs/arm64-v8a
+          cp $ANDROID_NDK_ROOT/sources/cxx-stl/llvm-libc++/libs/armeabi-v7a/libc++_shared.so jniLibs/armeabi-v7a/
+          cp $ANDROID_NDK_ROOT/sources/cxx-stl/llvm-libc++/libs/arm64-v8a/libc++_shared.so jniLibs/arm64-v8a/
+
+      - name: Build Universal APK
+        run: |
+          # Flet build command (example for local environment simulation)
+          # flet build apk --include jniLibs --include assets
+
+      - name: Push to Appetize.io
+        run: |
+          curl https://APIDtoken:${{ secrets.APPETIZE_TOKEN }}@api.appetize.io/v1/apps \
+            -F "file=@build/app-universal-release.apk" \
+            -F "platform=android"

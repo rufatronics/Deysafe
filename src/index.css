@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-deysafe-green: #0a3d0a;
+  --color-deysafe-blue: #0a0a3d;
+  --color-deysafe-orange: #3d1a0a;
+  --color-deysafe-red: #3d0a0a;
+}
+
+body {
+  @apply bg-zinc-950 text-white overflow-hidden;
+}
+
+.iphone-x {
+  position: relative;
+  width: 375px;
+  height: 812px;
+  background: #000;
+  border-radius: 40px;
+  box-shadow: 0 0 0 11px #1f1f1f, 0 0 0 13px #191919, 0 0 0 20px #111;
+  overflow: hidden;
+}
+
+.iphone-x:before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 30px;
+  background: #000;
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+  z-index: 10;
+}
