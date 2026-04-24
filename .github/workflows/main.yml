@@ -35,24 +35,41 @@ jobs:
           curl -L "https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite" -o assets/models/crop_doctor.tflite
           curl -L "https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite" -o assets/models/health_scan.tflite
 
-      - name: Build Native 1-bit Kernels (BitNet b1.58 optimized)
+      - name: Build Native 1-bit Kernels (Prism-LM Optimized)
         run: |
-          # Use specialized BitNet/llama.cpp fork for ternary quantization support
-          # This ensures we are not fallbacking to 4-bit dequantization kernels
-          echo "Cloning microsoft/BitNet or appropriate llama.cpp fork with ternary support..."
-          # git clone --recursive https://github.com/microsoft/BitNet.git
+          # Use specific Prism-LM/llama.cpp fork for 1-bit b1.58 quantization support
+          # This fork includes the high-performance ternary kernels for ARM
+          git clone --recursive https://github.com/Prism-LM/llama.cpp.git
+          cd llama.cpp
           
-          # Target ARMv7 (armeabi-v7a) and ARMv8 (arm64-v8a)
-          # Optimization for low-end CPUs (NEON/ASIMD)
-          echo "Compiling with -DGGML_BITNET=ON -DGGML_CPU_ARM_ARCH=7 for legacy devices"
-          echo "Compiling with -DGGML_BITNET=ON -DGGML_CPU_ARM_ARCH=8 for 64-bit devices"
+          # Build specialized native libraries for ARMv7 and ARM64
+          # We use -DGGML_BITNET=ON to enable the 1-bit inference engine
+          
+          # Build for arm64-v8a
+          mkdir build-arm64 && cd build-arm64
+          cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-23 \
+                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON ..
+          make -j$(nproc)
+          cp bin/libllama.so ../../jniLibs/arm64-v8a/
+          cd ..
+          
+          # Build for armeabi-v7a (Critical for 2GB legacy devices)
+          mkdir build-v7a && cd build-v7a
+          cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+                -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-21 \
+                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON ..
+          make -j$(nproc)
+          cp bin/libllama.so ../../jniLibs/armeabi-v7a/
+          cd ../..
 
       - name: Northwatch Intelligence Scrape (Offline WebView)
         run: |
           mkdir -p assets/www
           # Recursive wget to mirror the intelligence map for offline use
           wget --mirror --convert-links --adjust-extension --page-requisites --no-parent https://nw0.vercel.app -P assets/www/
-          # Ensure assets/www/nw0.vercel.app/index.html exists for Local WebView loading
+          # Move files to the root of www for the WebView to find index.html correctly
+          mv assets/www/nw0.vercel.app/* assets/www/ || true
 
       - name: Native Bundling (NDK libs)
         run: |
@@ -68,8 +85,13 @@ jobs:
 
       - name: Build Universal APK
         run: |
-          # Flet build command (example for local environment simulation)
-          # flet build apk --include jniLibs --include assets
+          # Flet build command for Android
+          # This compiles the Python code and bundles assets/ and jniLibs/
+          flet build apk --include jniLibs --include assets --release
+          
+          # Move APK to expected location for next stage
+          mkdir -p build
+          cp dist/*.apk build/app-universal-release.apk
 
       - name: Push to Appetize.io
         run: |
