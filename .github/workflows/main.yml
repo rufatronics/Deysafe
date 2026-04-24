@@ -37,9 +37,9 @@ jobs:
 
       - name: Build Native 1-bit Kernels (Prism-LM Optimized)
         run: |
-          # Use specific Prism-LM/llama.cpp fork for 1-bit b1.58 quantization support
+          # Use specific Prism-LLM/llama.cpp fork for 1-bit b1.58 quantization support
           # This fork includes the high-performance ternary kernels for ARM
-          git clone --recursive https://github.com/Prism-LM/llama.cpp.git
+          git clone --recursive https://github.com/Prism-LLM/llama.cpp.git
           cd llama.cpp
           
           # Build specialized native libraries for ARMv7 and ARM64
