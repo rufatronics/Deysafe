@@ -37,6 +37,7 @@ jobs:
 
       - name: Build Native 1-bit Kernels (Prism-ML Optimized)
         run: |
+          mkdir -p jniLibs/armeabi-v7a jniLibs/arm64-v8a
           # Use specific PrismML-Eng/llama.cpp fork for 1-bit b1.58 quantization support
           # This fork contains the high-performance ternary kernels specifically for Bonsai
           git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp
