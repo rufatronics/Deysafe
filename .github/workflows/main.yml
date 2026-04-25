@@ -49,7 +49,8 @@ jobs:
           mkdir build-arm64 && cd build-arm64
           cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-23 \
-                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON ..
+                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON \
+                -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF ..
           make -j$(nproc)
           cp bin/libllama.so ../../jniLibs/arm64-v8a/
           cd ..
@@ -58,7 +59,8 @@ jobs:
           mkdir build-v7a && cd build-v7a
           cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-21 \
-                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON ..
+                -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON \
+                -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF ..
           make -j$(nproc)
           cp bin/libllama.so ../../jniLibs/armeabi-v7a/
           cd ../..
