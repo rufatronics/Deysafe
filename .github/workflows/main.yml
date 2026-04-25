@@ -39,7 +39,7 @@ jobs:
         run: |
           # Use specific PrismML-Eng/llama.cpp fork for 1-bit b1.58 quantization support
           # This fork contains the high-performance ternary kernels specifically for Bonsai
-          git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp.git
+          git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp
           cd llama.cpp
           
           # Build specialized native libraries for ARMv7 and ARM64
