@@ -1,13 +1,14 @@
 {
-  "name": "Deysafe AI",
-  "description": "Offline-first mobile intelligence suite for low-end Android devices in Nigeria. Features crop/health vision and 1-bit LLM reasoning.",
+  "name": "Dey Safe AI",
+  "description": "Offline-first mobile intelligence suite for low-end Android devices. Features crop/health vision and 1-bit LLM reasoning.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ],
   "majorCapabilities": [
-    "Mobile Architecture",
+    "PWA Architecture",
     "On-device AI",
-    "Low-end Device Optimization"
+    "WebGPU Optimization"
   ]
 }

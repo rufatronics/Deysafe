@@ -43,13 +43,18 @@ jobs:
           git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp
           cd llama.cpp
           
+          # Patch missing arm_neon.h include which causes "undeclared identifier" (defaults to int return)
+          # Fix for ggml-cpu/arch/arm/quants.c
+          sed -i '1s/^/#include <arm_neon.h>\n/' ggml/src/ggml-cpu/arch/arm/quants.c || true
+          
           # Build specialized native libraries for ARMv7 and ARM64
           # We use -DGGML_BITNET=ON to enable the 1-bit inference engine
+          # We set ANDROID_PLATFORM to 28+ for posix_spawn support (required by some shared components)
           
           # Build for arm64-v8a
           mkdir build-arm64 && cd build-arm64
           cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-23 \
+                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
                 -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON \
                 -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF ..
           make -j$(nproc)
@@ -59,7 +64,7 @@ jobs:
           # Build for armeabi-v7a (Critical for 2GB legacy devices)
           mkdir build-v7a && cd build-v7a
           cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-                -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-21 \
+                -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-28 \
                 -DGGML_BITNET=ON -DGGML_ARM_FMA=ON -DGGML_NEON=ON \
                 -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF ..
           make -j$(nproc)
