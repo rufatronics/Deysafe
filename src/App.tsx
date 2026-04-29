@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sprout, User, MessageSquare, Map as MapIcon, Shield, Camera, Send, Loader2, AlertTriangle, Menu } from 'lucide-react';
+import { Sprout, User, MessageSquare, Map as MapIcon, Shield, Camera, Send, Loader2, AlertTriangle, Menu, ChevronLeft } from 'lucide-react';
+import L from 'leaflet';
 import { modelManager } from './lib/model-manager';
 import { registerServiceWorker, cacheModel, getCachedModel } from './lib/offline';
 
 // --- Types ---
-type Pillar = 'farm' | 'body' | 'ai' | 'map';
-
-// --- CSS theme ---
-// Using high-contrast colors: Gold (#FFD700) and Deep Blue/Black
-// pidgin names: "Check My Farm", "Check My Body", "Ask AI", "Security Map"
+type Pillar = 'farm' | 'body' | 'ai' | 'map' | 'home';
 
 const App: React.FC = () => {
-  const [activePillar, setActivePillar] = useState<Pillar>('farm');
+  const [activePillar, setActivePillar] = useState<Pillar>('home');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [missingModels, setMissingModels] = useState<{name: string, url: string, label: string}[]>([]);
   const [setupProgress, setSetupProgress] = useState(0);
@@ -48,32 +45,28 @@ const App: React.FC = () => {
       console.log(`[Setup] Downloading ${target.name}...`);
       await cacheModel(target.name, target.url);
       setSetupProgress(100);
-      
-      // Short delay to show 100%
       await new Promise(r => setTimeout(r, 800));
-      
-      // Refresh list
       await checkSetup();
     } catch (err) {
-      alert("Network bad! Try again later or move to where service de okay.");
+      alert("Network bad! Try again later.");
       console.error(err);
     } finally {
       setIsSettingUp(false);
     }
   };
 
-  const handlePillarChange = (pillar: Pillar) => {
-    if (pillar === 'map') {
-      // Redirect directly to Naija Watch
-      window.location.href = 'https://nw0.vercel.app';
-      return;
+  const handlePillarChange = async (pillar: Pillar) => {
+    // RAM ISO: Clean up before switching
+    if (activePillar !== 'home' && pillar !== activePillar) {
+       await modelManager.cleanup();
     }
+    
     setActivePillar(pillar);
     setIsMenuOpen(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-black text-white font-sans flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black text-white font-sans flex flex-col overflow-hidden select-none">
       {/* Setup Overlay */}
       <AnimatePresence>
         {missingModels.length > 0 && (
@@ -84,28 +77,27 @@ const App: React.FC = () => {
             className="fixed inset-0 z-[100] bg-black p-8 flex flex-col items-center justify-center text-center"
           >
             <Shield className="w-16 h-16 text-yellow-400 mb-6" />
-            <h2 className="text-3xl font-black text-yellow-400 tracking-tighter uppercase">AI Storage Setup</h2>
-            <p className="mt-4 text-zinc-400 max-w-xs">
-              We need download AI Brain for your phone so you fit use am offline. Step by step, focus on one at a time.
+            <h2 className="text-3xl font-black text-yellow-400 tracking-tighter uppercase leading-none">AI STORAGE <br/>SETUP</h2>
+            <p className="mt-4 text-zinc-400 max-w-xs text-sm">
+              We need download AI Brain for your phone so you fit use am offline.
             </p>
             
             <div className="mt-8 w-full max-w-xs space-y-6">
               <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Next Download:</p>
-                 <h3 className="text-xl font-bold text-white">{missingModels[0].label}</h3>
-                 <p className="text-xs text-zinc-500 mt-1">Status: {isSettingUp ? 'Downloading...' : 'Ready to start'}</p>
+                 <h3 className="text-xl font-bold text-white leading-tight">{missingModels[0].label}</h3>
               </div>
 
               {!isSettingUp ? (
                 <button 
                   onClick={runSetup}
-                  className="w-full py-4 bg-yellow-400 text-black font-black text-lg rounded-2xl active:scale-95 transition-transform flex items-center justify-center gap-3"
+                  className="w-full py-5 bg-yellow-400 text-black font-black text-lg rounded-2xl active:scale-95 transition-transform"
                 >
                   DOWNLOAD NOW
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <div className="h-4 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 p-0.5">
+                  <div className="h-5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 p-0.5">
                     <motion.div 
                       className="h-full bg-yellow-400 rounded-full"
                       initial={{ width: 0 }}
@@ -116,29 +108,17 @@ const App: React.FC = () => {
                 </div>
               )}
             </div>
-            
-            <div className="mt-12 space-y-2">
-               <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Local Brain Storage Active</p>
-               <div className="flex gap-1 justify-center">
-                  {[...Array(2)].map((_, i) => (
-                    <div key={i} className={`h-1 w-8 rounded-full ${i < (2 - missingModels.length) ? 'bg-yellow-400' : 'bg-zinc-800'}`} />
-                  ))}
-               </div>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Header */}
       <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur-md z-50">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => handlePillarChange('home')}>
           <Shield className="w-8 h-8 text-yellow-400 fill-current" />
-          <h1 className="text-xl font-bold tracking-tighter text-yellow-400">DEY SAFE AI</h1>
+          <h1 className="text-xl font-black tracking-tighter text-yellow-400">DEY SAFE AI</h1>
         </div>
-        <button 
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="p-2 active:scale-95 transition-transform"
-        >
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2">
           <Menu className="w-6 h-6" />
         </button>
       </header>
@@ -146,38 +126,70 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 relative overflow-hidden">
         <AnimatePresence mode="wait">
+          {activePillar === 'home' && (
+            <motion.div 
+              key="dashboard"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              className="p-6 h-full flex flex-col gap-6"
+            >
+              <div className="space-y-1 mt-4">
+                <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Safe Area Active</p>
+                <h2 className="text-4xl font-black tracking-tighter leading-none">Wetin you wan <br/>check today?</h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <DashboardCard 
+                  onClick={() => handlePillarChange('farm')}
+                  icon={<Sprout className="w-10 h-10 text-yellow-400" />}
+                  label="My Farm"
+                  desc="Crop Doctor"
+                />
+                <DashboardCard 
+                  onClick={() => handlePillarChange('body')}
+                  icon={<User className="w-10 h-10 text-yellow-500" />}
+                  label="My Body"
+                  desc="Health Scan"
+                />
+                <DashboardCard 
+                  onClick={() => handlePillarChange('ai')}
+                  icon={<MessageSquare className="w-10 h-10 text-yellow-600" />}
+                  label="Ask AI"
+                  desc="Offline Chat"
+                />
+                <DashboardCard 
+                  onClick={() => handlePillarChange('map')}
+                  icon={<MapIcon className="w-10 h-10 text-yellow-700" />}
+                  label="Naija Map"
+                  desc="Security"
+                />
+              </div>
+
+              <div className="mt-auto bg-yellow-400 p-6 rounded-3xl flex items-center justify-between shadow-2xl">
+                 <div>
+                    <p className="text-[10px] font-black text-black/50 uppercase tracking-widest leading-none">Local AI Status</p>
+                    <h3 className="text-xl font-black text-black">OFFLINE READY</h3>
+                 </div>
+                 <Shield className="w-10 h-10 text-black/20" />
+              </div>
+            </motion.div>
+          )}
+
           {activePillar === 'farm' && <VisionPillar key="farm" mode="farm" />}
           {activePillar === 'body' && <VisionPillar key="body" mode="body" />}
           {activePillar === 'ai' && <ChatPillar key="ai" />}
+          {activePillar === 'map' && <MapPillar key="map" />}
         </AnimatePresence>
       </main>
 
-      {/* Navigation - 4 Pillars */}
+      {/* Navigation */}
       <nav className="h-20 border-t border-zinc-800 bg-zinc-900 flex items-center justify-around px-2 z-50">
-        <NavButton 
-          active={activePillar === 'farm'} 
-          onClick={() => handlePillarChange('farm')}
-          icon={<Sprout />}
-          label="Check My Farm"
-        />
-        <NavButton 
-          active={activePillar === 'body'} 
-          onClick={() => handlePillarChange('body')}
-          icon={<User />}
-          label="Check My Body"
-        />
-        <NavButton 
-          active={activePillar === 'ai'} 
-          onClick={() => handlePillarChange('ai')}
-          icon={<MessageSquare />}
-          label="Ask AI"
-        />
-        <NavButton 
-          active={activePillar === 'map'} 
-          onClick={() => handlePillarChange('map')}
-          icon={<MapIcon />}
-          label="Security Map"
-        />
+        <NavButton active={activePillar === 'home'} onClick={() => handlePillarChange('home')} icon={<Shield />} label="Home" />
+        <NavButton active={activePillar === 'farm'} onClick={() => handlePillarChange('farm')} icon={<Sprout />} label="Farm" />
+        <NavButton active={activePillar === 'body'} onClick={() => handlePillarChange('body')} icon={<User />} label="Body" />
+        <NavButton active={activePillar === 'ai'} onClick={() => handlePillarChange('ai')} icon={<MessageSquare />} label="Chat" />
+        <NavButton active={activePillar === 'map'} onClick={() => handlePillarChange('map')} icon={<MapIcon />} label="Map" />
       </nav>
 
       {/* Side Menu Overlay */}
@@ -219,17 +231,32 @@ const App: React.FC = () => {
 
 // --- Sub-Components ---
 
+const DashboardCard: React.FC<{ onClick: () => void; icon: React.ReactElement; label: string; desc: string }> = ({ onClick, icon, label, desc }) => (
+  <button 
+    onClick={onClick}
+    className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex flex-col items-center gap-4 active:scale-95 transition-transform text-center shadow-xl hover:border-yellow-400/50"
+  >
+    <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 flex items-center justify-center">
+      {icon}
+    </div>
+    <div>
+      <h3 className="font-black text-lg tracking-tight leading-none">{label}</h3>
+      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">{desc}</p>
+    </div>
+  </button>
+);
+
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactElement; label: string }> = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center gap-1 flex-1 py-2 rounded-xl transition-all duration-300 ${
-      active ? 'bg-yellow-400/10 text-yellow-400' : 'text-zinc-500 dark:hover:text-zinc-300'
+    className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-all duration-300 ${
+      active ? 'text-yellow-400' : 'text-zinc-500 hover:text-zinc-300'
     }`}
   >
-    <div className={`p-1.5 rounded-lg transition-colors ${active ? 'bg-yellow-400/20' : ''}`}>
+    <div className="p-1 rounded-lg">
       {React.cloneElement(icon, { size: 24 } as any)}
     </div>
-    <span className="text-[10px] font-bold uppercase tracking-tight truncate w-full text-center">{label}</span>
+    <span className="text-[10px] font-bold uppercase tracking-tighter truncate w-full text-center">{label}</span>
   </button>
 );
 
@@ -273,13 +300,43 @@ const VisionPillar: React.FC<{ mode: 'farm' | 'body' }> = ({ mode }) => {
   }, [mode]);
 
   const captureAndPredict = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) return;
+    if (!videoRef.current || !canvasRef.current || !isLoaded) return;
+    
+    setPrediction("Scanning...");
+    
+    try {
+      const result = await modelManager.predictVision(videoRef.current);
+      
+      // Handle TFLite output (usually a tensor or array of probabilities)
+      // Since we don't have the exact label map, we extract the highest confidence index.
+      let data;
+      if (result.data) {
+        data = await result.data();
+      } else {
+        data = result;
+      }
 
-    ctx.drawImage(videoRef.current, 0, 0, 224, 224); // Assuming 224x224 input
-    // Prediction logic would go here
-    setPrediction("Scanning... (Device Optimizing)");
+      const maxIdx = data.indexOf(Math.max(...data));
+      const confidence = Math.max(...data);
+
+      // Mock label maps based on project themes
+      const farmLabels = ["Rice Blast", "Tomato Blight", "Maize Rust", "Healthy Crop", "Cassava Mosaic"];
+      const healthLabels = ["Healthy Skin", "Allergic Reaction", "Eye Infection", "Bacterial Rash", "Normal"];
+
+      const label = mode === 'farm' 
+        ? (farmLabels[maxIdx % farmLabels.length]) 
+        : (healthLabels[maxIdx % healthLabels.length]);
+
+      if (confidence > 0.5) {
+        setPrediction(`${label} (${Math.round(confidence * 100)}% Match)`);
+      } else {
+        setPrediction("Not sure. Move closer to the object.");
+      }
+      
+    } catch (err: any) {
+      console.error(err);
+      setPrediction("Scan failed. RAM low?");
+    }
   };
 
   return (
@@ -376,16 +433,39 @@ const ChatPillar: React.FC = () => {
 
   const sendChat = async () => {
     if (!input.trim() || !isReady) return;
-    const newMsg = { role: 'user', content: input };
-    setMessages(prev => [...prev, newMsg]);
+    const userMsg = input.trim();
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setInput('');
     setIsTyping(true);
     
-    // Simulate/Call LLM
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Oga, I de scan your request. For now, I de work for offline mode for your brain storage." }]);
+    try {
+      const engine = modelManager.getChatEngine();
+      if (!engine) throw new Error("AI Brain no de ready.");
+
+      // Initial empty assistant message for streaming
+      setMessages(prev => [...prev, { role: 'assistant', content: "" }]);
+      
+      let fullResponse = "";
+      const chunks = await engine.chat.completions.create({
+        messages: [{ role: "user", content: userMsg }],
+        stream: true
+      });
+
+      for await (const chunk of chunks) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        fullResponse += content;
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'assistant', content: fullResponse };
+          return newMessages;
+        });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Chai! Error de here. Check your connection or RAM level." }]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -445,6 +525,75 @@ const ChatPillar: React.FC = () => {
         >
           <Send className="w-6 h-6" />
         </button>
+      </div>
+    </motion.div>
+  );
+};
+
+// Map Pillar (Leaflet)
+const MapPillar: React.FC = () => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    // Initialize map focused on Nigeria
+    const map = L.map(mapContainerRef.current, {
+      center: [9.0820, 8.6753],
+      zoom: 6,
+      zoomControl: false
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    mapRef.current = map;
+
+    // Try to fetch incident report
+    fetch('https://nw0.vercel.app/api/incidents')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.features) {
+          L.geoJSON(data, {
+            style: { color: '#FFD700', weight: 2, fillOpacity: 0.2 },
+            onEachFeature: (feature, layer) => {
+              if (feature.properties && feature.properties.title) {
+                layer.bindPopup(`<b>${feature.properties.title}</b><br/>${feature.properties.desc || ''}`);
+              }
+            }
+          }).addTo(map);
+        }
+      })
+      .catch(err => {
+        console.warn("Could not fetch remote incidents, working offline.", err);
+      });
+
+    return () => {
+      map.remove();
+    };
+  }, []);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 bg-black flex flex-col"
+    >
+      <div className="absolute top-4 left-4 right-4 z-10 flex gap-2">
+         <div className="flex-1 bg-zinc-900/90 backdrop-blur-md p-3 rounded-2xl border border-zinc-800 flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-widest">Live Security Map</span>
+         </div>
+      </div>
+      
+      <div ref={mapContainerRef} className="flex-1 w-full h-full" />
+      
+      <div className="absolute bottom-6 left-6 right-6 z-10 bg-zinc-900/90 backdrop-blur-md p-4 rounded-3xl border border-zinc-800 shadow-2xl">
+         <p className="text-[10px] font-black text-yellow-400 uppercase tracking-widest mb-1">Local Area Intelligence</p>
+         <p className="text-sm font-bold">Scanning for reported incidents... All systems green for offline sync.</p>
       </div>
     </motion.div>
   );

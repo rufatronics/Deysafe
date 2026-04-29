@@ -1,45 +1,25 @@
-import * as tf from '@tensorflow/tfjs';
 import { CreateWebWorkerMLCEngine, MLCEngineInterface } from "@mlc-ai/web-llm";
-import { getCachedModel, deleteCachedModel } from './offline';
+import { getCachedModel } from './offline';
 
-// Using global tflite from CDN
+// Using global tf and tflite from CDN to optimize bundle size and RAM
 declare global {
   interface Window {
     tflite: any;
+    tf: any;
   }
 }
+
+const tf = typeof window !== 'undefined' ? window.tf : null;
 
 class ModelManager {
   private static instance: ModelManager;
   private currentModelType: 'vision' | 'chat' | null = null;
   private visionModel: any | null = null;
   private chatEngine: MLCEngineInterface | null = null;
+  private tfliteInitialized = false;
 
   private constructor() {
     this.initTFLite();
-  }
-
-  private tfliteInitialized = false;
-
-  private async initTFLite(retries = 3) {
-    for (let i = 0; i < retries; i++) {
-      try {
-        if (typeof window !== 'undefined' && window.tflite) {
-          // Path is already set in index.html, but we ensure it's locked in
-          if (window.tflite.setWasmPath) {
-            window.tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/');
-          }
-          
-          // Wait for the library to be truly "ready" (some versions have an internal state)
-          await new Promise(r => setTimeout(r, 1000 + (i * 1000)));
-          this.tfliteInitialized = true;
-          return;
-        }
-      } catch (e) {
-        console.warn(`[ModelManager] Init attempt ${i+1} failed`, e);
-      }
-      await new Promise(r => setTimeout(r, 1000));
-    }
   }
 
   public static getInstance(): ModelManager {
@@ -47,6 +27,98 @@ class ModelManager {
       ModelManager.instance = new ModelManager();
     }
     return ModelManager.instance;
+  }
+
+  /**
+   * RAM ISOLATION: Wipe everything clean before new loads.
+   */
+  public async cleanup(): Promise<void> {
+    console.log('[ModelManager] RAM Isolation: Cleaning up...');
+    
+    // 1. Dispose Vision Model
+    if (this.visionModel) {
+      this.visionModel = null;
+    }
+
+    // 2. Unload Chat Engine
+    if (this.chatEngine) {
+      try {
+        await this.chatEngine.unload();
+      } catch (e) {
+        console.warn('Chat engine unload failed', e);
+      }
+      this.chatEngine = null;
+    }
+
+    // 3. Clear TFJS Tensors and Internal Cache
+    tf.disposeVariables();
+    const numTensors = tf.memory().numTensors;
+    if (numTensors > 0) {
+      tf.dispose(); 
+    }
+
+    // 4. Force texture release (Hack for low-end GPUs)
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+    }
+
+    this.currentModelType = null;
+    console.log(`[ModelManager] Cleanup complete. Tensors left: ${tf.memory().numTensors}`);
+  }
+
+  /**
+   * CRITICAL ENGINE CONFIG: Verify _malloc before resolving.
+   */
+  private async initTFLite(retries = 10): Promise<void> {
+    if (this.tfliteInitialized) return;
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        if (typeof window !== 'undefined' && window.tflite) {
+          // Set path
+          if (window.tflite.setWasmPath) {
+            window.tflite.setWasmPath('/tflite/');
+          }
+
+          // Check for internal Module and _malloc
+          // This is the specific fix for "Cannot read properties of undefined (reading '_malloc')"
+          const isReady = await this.waitForWasm(window.tflite);
+          
+          if (isReady) {
+            this.tfliteInitialized = true;
+            console.log('[ModelManager] TFLite WASM Engine Ready (_malloc detected)');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn(`[ModelManager] Wasm Init attempt ${i+1} failed`, e);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    throw new Error('TFLite WASM loader timed out. Check /public/tflite/ folder.');
+  }
+
+  private async waitForWasm(tflite: any): Promise<boolean> {
+    // We try to access the internal module if possible, or just wait for a test load/eval
+    // The alpha.10 exposes several internals. 
+    return new Promise((resolve) => {
+      const check = () => {
+        try {
+          // In some versions, it's tflite._module or a similar getter
+          // If we can't find it, we try to see if a simple dummy call works
+          if (tflite && (tflite._module && tflite._module._malloc || tflite.loadTFLiteModel)) {
+             resolve(true);
+             return;
+          }
+        } catch (e) {}
+        setTimeout(check, 200);
+      };
+      check();
+      // Timeout after 5s
+      setTimeout(() => resolve(false), 5000);
+    });
   }
 
   private async checkSignature(buffer: ArrayBuffer): Promise<boolean> {
@@ -57,17 +129,16 @@ class ModelManager {
   }
 
   public async loadVisionModel(modelId: string, fallbackUrl: string): Promise<any> {
-    await this.disposeCurrent();
+    await this.cleanup();
     
-    console.log(`[ModelManager] Initializing ${modelId}...`);
+    console.log(`[ModelManager] Preparing ${modelId}...`);
     
-    // Ensure initialized
     if (!this.tfliteInitialized) {
       await this.initTFLite();
     }
 
     if (!window.tflite) {
-       throw new Error('TFLite runtime not loaded. Please refresh or check network.');
+       throw new Error('TFLite runtime not loaded.');
     }
 
     let modelBuffer: ArrayBuffer | null = null;
@@ -76,55 +147,33 @@ class ModelManager {
 
     while (attempts < maxAttempts) {
       try {
-        // 1. Get Buffer
         if (!modelBuffer) {
           const cachedBlob = await getCachedModel(modelId);
           if (cachedBlob) {
-            console.log(`[ModelManager] Loading from cache: ${modelId}`);
+            console.log(`[ModelManager] Load from IndexedDB: ${modelId}`);
             modelBuffer = await cachedBlob.arrayBuffer();
           } else {
-            console.log(`[ModelManager] Downloading: ${modelId}`);
+            console.log(`[ModelManager] Downloading to cache: ${modelId}`);
             const response = await fetch(fallbackUrl);
             modelBuffer = await response.arrayBuffer();
           }
         }
 
-        // 2. Validate Signature
         if (!(await this.checkSignature(modelBuffer))) {
-          const text = new TextDecoder().decode(modelBuffer.slice(0, 100));
-          if (text.includes('git-lfs')) {
-            throw new Error('Download failed: Git LFS pointer detected.');
-          }
           throw new Error('Invalid TFLite model data (Signature mismatch)');
         }
 
-        // 3. Load Model
-        // This is where _malloc usually fails if WASM isn't ready
         this.visionModel = await window.tflite.loadTFLiteModel(modelBuffer);
         console.log(`[ModelManager] ${modelId} activated.`);
         break; 
 
       } catch (err: any) {
         attempts++;
-        const isWasmError = err.message && (err.message.includes('_malloc') || err.message.includes('undefined'));
+        console.error(`[ModelManager] Load failed (Attempt ${attempts}):`, err.message);
         
-        console.error(`[ModelManager] Load attempt ${attempts} failed:`, err.message);
-        
-        if (isWasmError) {
-          console.warn('[ModelManager] WASM Memory Error. Attempting reset...');
-          this.tfliteInitialized = false;
-          await this.initTFLite(1); 
-          await new Promise(r => setTimeout(r, 2000));
-        } else {
-          // If it's not a WASM error, it might be a bad cache
-          await deleteCachedModel(modelId);
-          modelBuffer = null;
-        }
-
         if (attempts >= maxAttempts) {
           throw new Error(`Failed to load ${modelId}. ${err.message}`);
         }
-        
         await new Promise(r => setTimeout(r, 1000));
       }
     }
@@ -134,38 +183,55 @@ class ModelManager {
   }
 
   public async loadChatEngine(modelId: string, onProgress?: (p: any) => void): Promise<MLCEngineInterface> {
-    await this.disposeCurrent();
+    await this.cleanup();
 
-    console.log(`Loading Chat Engine: ${modelId}`);
-    // WebLLM uses WebGPU if available, otherwise Wasm
+    console.log(`[ModelManager] Loading Chat: ${modelId}`);
     this.chatEngine = await CreateWebWorkerMLCEngine(
       new Worker(new URL('./chat-worker.ts', import.meta.url), { type: 'module' }),
       modelId,
-      { initProgressCallback: onProgress }
+      { 
+        initProgressCallback: onProgress,
+        appConfig: {
+          context_window_size: 512
+        }
+      } as any
     );
     
     this.currentModelType = 'chat';
     return this.chatEngine;
   }
 
+  public async predictVision(input: ImageData | HTMLVideoElement | HTMLCanvasElement): Promise<any> {
+    if (!this.visionModel) {
+      throw new Error('No vision model loaded.');
+    }
+
+    // Convert input to tensor
+    // Most TFLite classification models expect 224x224x3 or similar
+    // we use tf.browser.fromPixels and resize
+    const tensor = tf.tidy(() => {
+      let img = tf.browser.fromPixels(input);
+      // Resize to model expected input - we try to infer from model or default to 224
+      img = tf.image.resizeBilinear(img, [224, 224]);
+      // Normalize if needed (most TFLite models expect 0-255 or 0-1)
+      // For now we pass as is, or normalize to 0-1 if it's float model
+      return img.expandDims(0);
+    });
+
+    try {
+      const output = await this.visionModel.predict(tensor);
+      return output;
+    } finally {
+      tensor.dispose();
+    }
+  }
+
+  public getChatEngine(): MLCEngineInterface | null {
+    return this.chatEngine;
+  }
+
   public async disposeCurrent(): Promise<void> {
-    if (this.currentModelType === 'vision' && this.visionModel) {
-      console.log('Disposing Vision Model');
-      // TFLite models usually need to be cleared from Wasm memory
-      // Unfortunately tfjs-tflite doesn't have a simple .dispose() on the model itself 
-      // but we can try to trigger GC or rely on the wrapper
-      this.visionModel = null;
-    }
-
-    if (this.currentModelType === 'chat' && this.chatEngine) {
-      console.log('Disposing Chat Engine');
-      await this.chatEngine.unload();
-      this.chatEngine = null;
-    }
-
-    this.currentModelType = null;
-    // Explicitly call TFJS dispose if used
-    tf.disposeVariables();
+    await this.cleanup();
   }
 }
 

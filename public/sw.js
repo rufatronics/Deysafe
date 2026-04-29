@@ -2,39 +2,30 @@ importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox
 
 if (workbox) {
   console.log(`Workbox is loaded`);
-
-  // Cache images
-  workbox.routing.registerRoute(
-    ({request}) => request.destination === 'image',
-    new workbox.strategies.CacheFirst({
-      cacheName: 'images',
-      plugins: [
-        new workbox.expiration.ExpirationPlugin({
-          maxEntries: 60,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
-        }),
-      ],
-    })
-  );
-
-  // Cache JS/CSS
-  workbox.routing.registerRoute(
-    ({request}) => request.destination === 'script' || request.destination === 'style',
-    new workbox.strategies.StaleWhileRevalidate({
-      cacheName: 'static-resources',
-    })
-  );
-
-  // Cache font files
-  workbox.routing.registerRoute(
-    ({request}) => request.destination === 'font',
-    new workbox.strategies.CacheFirst({
-      cacheName: 'fonts',
-    })
-  );
   
-  // Custom model caching is handled in IndexedDB via offline.ts, 
-  // but we could also intercept fetch here if needed.
+  // Force adoption
+  workbox.core.skipWaiting();
+  workbox.core.clientsClaim();
+
+  // Cache static assets (images, fonts, scripts)
+  workbox.routing.registerRoute(
+    ({request}) => ['image', 'font', 'script', 'style'].includes(request.destination),
+    new workbox.strategies.StaleWhileRevalidate({
+      cacheName: 'static-assets',
+    })
+  );
+
+  // Offline Fallback for Navigation
+  workbox.routing.registerRoute(
+    ({request}) => request.mode === 'navigate',
+    new workbox.strategies.NetworkFirst({
+      cacheName: 'pages',
+    })
+  );
+
+  // NOTE: Large models (.tflite, .gguf) are stored in IndexedDB 
+  // via src/lib/offline.ts to prevent Cache API eviction.
+  // The SW keeps the app shell alive while the app logic handles the big brains.
 } else {
   console.log(`Workbox didn't load`);
 }
