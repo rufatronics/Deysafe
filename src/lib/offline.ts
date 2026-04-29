@@ -13,18 +13,35 @@ async function getDB() {
 
 export async function cacheModel(name: string, url: string) {
   const db = await getDB();
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
+  console.log(`[Offline] Fetching asset: ${name} from ${url}`);
+  
+  try {
+    const response = await fetch(url, { mode: 'cors' });
+    if (!response.ok) {
+       console.error(`[Offline] 404/Error at URL: ${url}`);
+       throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    console.log(`[Offline] Saving ${name} (${blob.size} bytes) to IndexedDB`);
+    await db.put(MODEL_STORE_NAME, blob, name);
+    return blob;
+  } catch (fetchErr: any) {
+    console.error(`[Offline] Critical Fetch Failure for ${name} at ${url}`);
+    if (fetchErr.message && fetchErr.message.includes('Failed to fetch')) {
+      throw new Error("Connection Blocked: Your browser or network is blocking the AI download. Check your data or VPN.");
+    }
+    throw fetchErr;
   }
-  const blob = await response.blob();
-  await db.put(MODEL_STORE_NAME, blob, name);
-  return blob;
 }
 
 export async function getCachedModel(name: string): Promise<Blob | null> {
   const db = await getDB();
   return db.get(MODEL_STORE_NAME, name);
+}
+
+export async function listCachedModels(): Promise<string[]> {
+  const db = await getDB();
+  return db.getAllKeys(MODEL_STORE_NAME) as Promise<string[]>;
 }
 
 export async function deleteCachedModel(name: string) {

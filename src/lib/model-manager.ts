@@ -31,25 +31,33 @@ class ModelManager {
    * RAM ISOLATION: Wipe everything clean before new loads.
    */
   public async cleanup(): Promise<void> {
-    console.log('[ModelManager] RAM Isolation: Cleaning up...');
+    console.log('[ModelManager] RAM Isolation: Kill Switch Triggered');
     
-    // 1. Dispose Vision Model
-    if (this.visionModel) {
-      this.visionModel = null;
-    }
+    // 1. Kill Vision Model
+    this.visionModel = null;
 
-    // 2. Unload Chat Engine
+    // 2. Unload Chat Engine (Critical for RAM release)
     if (this.chatEngine) {
       try {
         await this.chatEngine.unload();
       } catch (e) {
-        console.warn('Chat engine unload failed', e);
+        console.warn('[ModelManager] Unload fail:', e);
       }
       this.chatEngine = null;
     }
 
-    // 3. Clear TFJS Tensors and Internal Cache
-    tf.disposeVariables();
+    // 3. Force TFJS Disposal
+    try {
+      tf.disposeVariables();
+      // Scrutinize memory
+      if (tf.memory().numTensors > 0) {
+        // Fallback for leaked tensors
+        (tf as any).engine().startScope();
+        (tf as any).engine().endScope();
+      }
+    } catch (e) {
+      console.warn('[ModelManager] TF cleanup error:', e);
+    }
 
     // 4. Force texture release (Hack for low-end GPUs)
     const gl = document.createElement('canvas').getContext('webgl');
@@ -135,7 +143,7 @@ class ModelManager {
   public async loadChatEngine(modelId: string, onProgress?: (p: any) => void): Promise<MLCEngineInterface> {
     await this.cleanup();
 
-    console.log(`[ModelManager] Loading SmolLM2: ${modelId}`);
+    console.log(`[ModelManager] Loading SmolLM2 (CPU/WASM) for 2GB RAM: ${modelId}`);
     
     this.chatEngine = await CreateWebWorkerMLCEngine(
       new Worker(new URL('./chat-worker.ts', import.meta.url), { type: 'module' }),
@@ -147,14 +155,15 @@ class ModelManager {
             {
               model: "https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/",
               model_id: modelId,
-              model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist-v2/smollm2-135m-instruct-q4f16_1-v1_0-webgpu.wasm",
+              model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist/SmolLM2-135M-Instruct-q4f16_1-MLC-wasm.wasm",
               low_resource_required: true,
             }
           ]
         },
         chatConfig: {
           context_window_size: 256,
-        }
+        },
+        device_type: "wasm" // Force CPU mode for Tecno Spark 4 compatibility
       } as any
     );
     

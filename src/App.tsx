@@ -4,7 +4,7 @@ import { Sprout, User, MessageSquare, Map as MapIcon, Shield, Camera, Send, Load
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { modelManager } from './lib/model-manager';
-import { registerServiceWorker, cacheModel, getCachedModel } from './lib/offline';
+import { registerServiceWorker, cacheModel, getCachedModel, listCachedModels, deleteCachedModel } from './lib/offline';
 
 // --- Types ---
 type Pillar = 'farm' | 'body' | 'ai' | 'map' | 'home';
@@ -12,6 +12,8 @@ type Pillar = 'farm' | 'body' | 'ai' | 'map' | 'home';
 const App: React.FC = () => {
   const [activePillar, setActivePillar] = useState<Pillar>('home');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showAssets, setShowAssets] = useState(false);
+  const [cachedAssets, setCachedAssets] = useState<string[]>([]);
   const [missingModels, setMissingModels] = useState<{name: string, url: string, label: string}[]>([]);
   const [setupProgress, setSetupProgress] = useState(0);
   const [isSettingUp, setIsSettingUp] = useState(false);
@@ -30,12 +32,24 @@ const App: React.FC = () => {
       { name: 'SmolLM2-tokenizer', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/tokenizer.json', label: 'SMOLLM TOKENIZER' }
     ];
     
+    // Updated verification list for the Spark 4 hardware
+    const verifiedModels = [
+      { name: 'crop_doctor', url: 'https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite', label: 'CROP DOCTOR (Farm)' },
+      { name: 'health_scan', url: 'https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite', label: 'HEALTH SCAN (Body)' },
+      { name: 'SmolLM2-config', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/mlc-chat-config.json', label: 'SMOLLM CONFIG (Chat)' },
+      { name: 'SmolLM2-lib', url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist/SmolLM2-135M-Instruct-q4f16_1-MLC-wasm.wasm', label: 'SMOLLM ENGINE (WASM)' },
+      { name: 'SmolLM2-tokenizer', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/tokenizer.json', label: 'SMOLLM TOKENIZER' }
+    ];
+    
     const missing = [];
-    for (const model of allModels) {
+    for (const model of verifiedModels) {
       const cached = await getCachedModel(model.name);
       if (!cached) missing.push(model);
     }
     setMissingModels(missing);
+    
+    const cachedKeys = await listCachedModels();
+    setCachedAssets(cachedKeys);
   };
 
   const runSetup = async () => {
@@ -43,19 +57,20 @@ const App: React.FC = () => {
     setIsSettingUp(true);
     
     try {
-      // Sequential Download
+      // Sequential Download: One by one to preserve RAM/Network
       for (const target of missingModels) {
-        console.log(`[Setup] Sequential Download: ${target.name}...`);
-        setSetupProgress(10); // Start progress
+        console.log(`[Setup] Downloading ${target.label}...`);
+        setSetupProgress(10);
         await cacheModel(target.name, target.url);
         setSetupProgress(100);
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 600)); // Minimal breather for disk I/O
       }
       
       await checkSetup();
-    } catch (err) {
-      alert("Intelligence download failed. Check network data.");
-      console.error(err);
+    } catch (err: any) {
+      const failedLabel = missingModels[0]?.label || "Asset";
+      alert(`Download Failed: ${failedLabel}. Error: ${err.message}. Check network.`);
+      console.error("[Setup Error]", err);
     } finally {
       setIsSettingUp(false);
       setSetupProgress(0);
@@ -218,9 +233,27 @@ const App: React.FC = () => {
               className="absolute right-0 top-0 bottom-0 w-64 bg-zinc-900 z-[70] p-6 flex flex-col gap-4 border-l border-zinc-800"
             >
               <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mt-8">Settings & Info</h2>
-              <button className="flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg">
-                <Shield className="w-5 h-5 text-yellow-400" />
-                <span>Security Check</span>
+              <button 
+                onClick={() => { setShowAssets(true); setIsMenuOpen(false); }}
+                className="flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                   <Shield className="w-4 h-4 text-yellow-400" />
+                </div>
+                <div>
+                   <span className="block text-sm font-bold">Intelligence Assets</span>
+                   <span className="block text-[10px] text-zinc-500 uppercase">{cachedAssets.length} Saved</span>
+                </div>
+              </button>
+
+              <button className="flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg text-left">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                   <Shield className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div>
+                   <span className="block text-sm font-bold">Security Check</span>
+                   <span className="block text-[10px] text-zinc-500 uppercase">System Active</span>
+                </div>
               </button>
               <div className="mt-auto pt-6 border-t border-zinc-800">
                 <p className="text-xs text-zinc-500">Device Optimize: 2GB RAM Mode</p>
@@ -231,6 +264,63 @@ const App: React.FC = () => {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Asset Viewer Modal */}
+      <AnimatePresence>
+        {showAssets && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-xl p-6 flex flex-col"
+          >
+            <div className="flex items-center justify-between mb-8">
+               <h2 className="text-2xl font-black tracking-tighter">SAVED INTELLIGENCE</h2>
+               <button onClick={() => setShowAssets(false)} className="p-2 bg-zinc-800 rounded-full">
+                 <Menu className="w-6 h-6 rotate-45" />
+               </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {cachedAssets.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-600">
+                  <Shield className="w-16 h-16 opacity-20 mb-4" />
+                  <p>No assets downloaded yet.</p>
+                </div>
+              ) : (
+                cachedAssets.map(asset => (
+                  <div key={asset} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-yellow-400/10 flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-yellow-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-white">{asset}</p>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Local Snapshot</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        if (confirm(`Delete ${asset}?`)) {
+                          await deleteCachedModel(asset);
+                          await checkSetup();
+                        }
+                      }}
+                      className="p-2 text-zinc-600 hover:text-red-500"
+                    >
+                      <AlertTriangle className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-zinc-800">
+               <p className="text-xs text-zinc-500 text-center uppercase tracking-widest font-bold">Total Assets: {cachedAssets.length}</p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
