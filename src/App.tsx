@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sprout, User, MessageSquare, Map as MapIcon, Shield, Camera, Send, Loader2, AlertTriangle, Menu, ChevronLeft } from 'lucide-react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { modelManager } from './lib/model-manager';
 import { registerServiceWorker, cacheModel, getCachedModel } from './lib/offline';
 
@@ -22,8 +23,9 @@ const App: React.FC = () => {
 
   const checkSetup = async () => {
     const allModels = [
-      { name: 'crop_doctor', url: 'https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite', label: 'CROP DOCTOR (Farm AI)' },
-      { name: 'health_scan', url: 'https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite', label: 'HEALTH SCAN (Body AI)' }
+      { name: 'crop_doctor', url: 'https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite', label: 'CROP DOCTOR (Farm)' },
+      { name: 'health_scan', url: 'https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite', label: 'HEALTH SCAN (Body)' },
+      { name: 'SmolLM2-135M-Instruct-q4f16_1-MLC-config', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/mlc-chat-config.json', label: 'SMOLLM AI (Chat)' }
     ];
     
     const missing = [];
@@ -37,21 +39,24 @@ const App: React.FC = () => {
   const runSetup = async () => {
     if (missingModels.length === 0) return;
     setIsSettingUp(true);
-    setSetupProgress(0);
     
-    const target = missingModels[0];
-
     try {
-      console.log(`[Setup] Downloading ${target.name}...`);
-      await cacheModel(target.name, target.url);
-      setSetupProgress(100);
-      await new Promise(r => setTimeout(r, 800));
+      // Sequential Download
+      for (const target of missingModels) {
+        console.log(`[Setup] Sequential Download: ${target.name}...`);
+        setSetupProgress(10); // Start progress
+        await cacheModel(target.name, target.url);
+        setSetupProgress(100);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
       await checkSetup();
     } catch (err) {
-      alert("Network bad! Try again later.");
+      alert("Intelligence download failed. Check network data.");
       console.error(err);
     } finally {
       setIsSettingUp(false);
+      setSetupProgress(0);
     }
   };
 
@@ -77,15 +82,16 @@ const App: React.FC = () => {
             className="fixed inset-0 z-[100] bg-black p-8 flex flex-col items-center justify-center text-center"
           >
             <Shield className="w-16 h-16 text-yellow-400 mb-6" />
-            <h2 className="text-3xl font-black text-yellow-400 tracking-tighter uppercase leading-none">AI STORAGE <br/>SETUP</h2>
+            <h2 className="text-3xl font-black text-yellow-400 tracking-tighter uppercase leading-none">DOWNLOAD <br/>INTELLIGENCE</h2>
             <p className="mt-4 text-zinc-400 max-w-xs text-sm">
-              We need download AI Brain for your phone so you fit use am offline.
+              We need to download new AI Brains for your phone. This is a one-time setup for offline security.
             </p>
             
             <div className="mt-8 w-full max-w-xs space-y-6">
               <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                 <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Next Download:</p>
+                 <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Sequential Download:</p>
                  <h3 className="text-xl font-bold text-white leading-tight">{missingModels[0].label}</h3>
+                 <p className="text-[10px] text-zinc-500 mt-4 uppercase">Remaining: {missingModels.length - 1} brain(s)</p>
               </div>
 
               {!isSettingUp ? (
@@ -415,7 +421,7 @@ const ChatPillar: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        await modelManager.loadChatEngine("Bonsai-1b-GGUF", (p) => {
+        await modelManager.loadChatEngine("SmolLM2-135M-Instruct-q4f16_1-MLC", (p) => {
           setLoadProgress(Math.round(p.progress * 100));
         });
         setIsReady(true);
@@ -424,7 +430,7 @@ const ChatPillar: React.FC = () => {
       }
     };
     init();
-    return () => { modelManager.disposeCurrent(); };
+    return () => { modelManager.cleanup(); };
   }, []);
 
   useEffect(() => {
@@ -487,8 +493,8 @@ const ChatPillar: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">{loadProgress}%</div>
           </div>
           <div>
-            <h3 className="text-xl font-bold text-yellow-400">Loading AI Brain</h3>
-            <p className="text-zinc-500 mt-2">Bonsai 1-bit engine de load for your phone RAM. Wait small...</p>
+            <h3 className="text-xl font-bold text-yellow-400">Loading SmolLM2</h3>
+            <p className="text-zinc-500 mt-2">135M power engine de load for your phone RAM. Wait small...</p>
           </div>
         </div>
       )}
@@ -497,8 +503,8 @@ const ChatPillar: React.FC = () => {
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center p-10 text-zinc-600">
             <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
-            <p className="font-bold">Chat with Bonsai AI</p>
-            <p className="text-sm">Ask me anything about your farm or security.</p>
+            <p className="font-bold">Chat with SmolLM2</p>
+            <p className="text-sm">Small AI, big sense. Optimized for 2GB RAM devices.</p>
           </div>
         )}
         {messages.map((m, i) => (

@@ -1,15 +1,13 @@
+import * as tf from '@tensorflow/tfjs';
 import { CreateWebWorkerMLCEngine, MLCEngineInterface } from "@mlc-ai/web-llm";
 import { getCachedModel } from './offline';
 
-// Using global tf and tflite from CDN to optimize bundle size and RAM
+// Global TFLite from /public/tflite/
 declare global {
   interface Window {
     tflite: any;
-    tf: any;
   }
 }
-
-const tf = typeof window !== 'undefined' ? window.tf : null;
 
 class ModelManager {
   private static instance: ModelManager;
@@ -52,10 +50,6 @@ class ModelManager {
 
     // 3. Clear TFJS Tensors and Internal Cache
     tf.disposeVariables();
-    const numTensors = tf.memory().numTensors;
-    if (numTensors > 0) {
-      tf.dispose(); 
-    }
 
     // 4. Force texture release (Hack for low-end GPUs)
     const gl = document.createElement('canvas').getContext('webgl');
@@ -68,27 +62,16 @@ class ModelManager {
     console.log(`[ModelManager] Cleanup complete. Tensors left: ${tf.memory().numTensors}`);
   }
 
-  /**
-   * CRITICAL ENGINE CONFIG: Verify _malloc before resolving.
-   */
   private async initTFLite(retries = 10): Promise<void> {
     if (this.tfliteInitialized) return;
 
     for (let i = 0; i < retries; i++) {
       try {
         if (typeof window !== 'undefined' && window.tflite) {
-          // Set path
-          if (window.tflite.setWasmPath) {
-            window.tflite.setWasmPath('/tflite/');
-          }
-
-          // Check for internal Module and _malloc
-          // This is the specific fix for "Cannot read properties of undefined (reading '_malloc')"
+          window.tflite.setWasmPath('/tflite/');
           const isReady = await this.waitForWasm(window.tflite);
-          
           if (isReady) {
             this.tfliteInitialized = true;
-            console.log('[ModelManager] TFLite WASM Engine Ready (_malloc detected)');
             return;
           }
         }
@@ -97,18 +80,13 @@ class ModelManager {
       }
       await new Promise(r => setTimeout(r, 1000));
     }
-    throw new Error('TFLite WASM loader timed out. Check /public/tflite/ folder.');
   }
 
-  private async waitForWasm(tflite: any): Promise<boolean> {
-    // We try to access the internal module if possible, or just wait for a test load/eval
-    // The alpha.10 exposes several internals. 
+  private async waitForWasm(tfliteObj: any): Promise<boolean> {
     return new Promise((resolve) => {
       const check = () => {
         try {
-          // In some versions, it's tflite._module or a similar getter
-          // If we can't find it, we try to see if a simple dummy call works
-          if (tflite && (tflite._module && tflite._module._malloc || tflite.loadTFLiteModel)) {
+          if (tfliteObj && (tfliteObj.loadTFLiteModel)) {
              resolve(true);
              return;
           }
@@ -116,7 +94,6 @@ class ModelManager {
         setTimeout(check, 200);
       };
       check();
-      // Timeout after 5s
       setTimeout(() => resolve(false), 5000);
     });
   }
@@ -131,53 +108,26 @@ class ModelManager {
   public async loadVisionModel(modelId: string, fallbackUrl: string): Promise<any> {
     await this.cleanup();
     
-    console.log(`[ModelManager] Preparing ${modelId}...`);
-    
     if (!this.tfliteInitialized) {
       await this.initTFLite();
     }
 
-    if (!window.tflite) {
-       throw new Error('TFLite runtime not loaded.');
-    }
+    if (!window.tflite) throw new Error('TFLite runtime not found.');
 
     let modelBuffer: ArrayBuffer | null = null;
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    while (attempts < maxAttempts) {
-      try {
-        if (!modelBuffer) {
-          const cachedBlob = await getCachedModel(modelId);
-          if (cachedBlob) {
-            console.log(`[ModelManager] Load from IndexedDB: ${modelId}`);
-            modelBuffer = await cachedBlob.arrayBuffer();
-          } else {
-            console.log(`[ModelManager] Downloading to cache: ${modelId}`);
-            const response = await fetch(fallbackUrl);
-            modelBuffer = await response.arrayBuffer();
-          }
-        }
-
-        if (!(await this.checkSignature(modelBuffer))) {
-          throw new Error('Invalid TFLite model data (Signature mismatch)');
-        }
-
-        this.visionModel = await window.tflite.loadTFLiteModel(modelBuffer);
-        console.log(`[ModelManager] ${modelId} activated.`);
-        break; 
-
-      } catch (err: any) {
-        attempts++;
-        console.error(`[ModelManager] Load failed (Attempt ${attempts}):`, err.message);
-        
-        if (attempts >= maxAttempts) {
-          throw new Error(`Failed to load ${modelId}. ${err.message}`);
-        }
-        await new Promise(r => setTimeout(r, 1000));
-      }
+    const cachedBlob = await getCachedModel(modelId);
+    if (cachedBlob) {
+      modelBuffer = await cachedBlob.arrayBuffer();
+    } else {
+      const response = await fetch(fallbackUrl);
+      modelBuffer = await response.arrayBuffer();
     }
 
+    if (!(await this.checkSignature(modelBuffer))) {
+      throw new Error('Invalid TFLite model data');
+    }
+
+    this.visionModel = await window.tflite.loadTFLiteModel(modelBuffer);
     this.currentModelType = 'vision';
     return this.visionModel;
   }
@@ -185,14 +135,25 @@ class ModelManager {
   public async loadChatEngine(modelId: string, onProgress?: (p: any) => void): Promise<MLCEngineInterface> {
     await this.cleanup();
 
-    console.log(`[ModelManager] Loading Chat: ${modelId}`);
+    console.log(`[ModelManager] Loading SmolLM2: ${modelId}`);
+    
     this.chatEngine = await CreateWebWorkerMLCEngine(
       new Worker(new URL('./chat-worker.ts', import.meta.url), { type: 'module' }),
       modelId,
       { 
         initProgressCallback: onProgress,
         appConfig: {
-          context_window_size: 512
+          model_list: [
+            {
+              model: "https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/",
+              model_id: modelId,
+              model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist-v2/smollm2-135m-instruct-q4f16_1-v1_0-webgpu.wasm",
+              low_resource_required: true,
+            }
+          ]
+        },
+        chatConfig: {
+          context_window_size: 256,
         }
       } as any
     );
@@ -202,19 +163,11 @@ class ModelManager {
   }
 
   public async predictVision(input: ImageData | HTMLVideoElement | HTMLCanvasElement): Promise<any> {
-    if (!this.visionModel) {
-      throw new Error('No vision model loaded.');
-    }
+    if (!this.visionModel) throw new Error('No vision model loaded.');
 
-    // Convert input to tensor
-    // Most TFLite classification models expect 224x224x3 or similar
-    // we use tf.browser.fromPixels and resize
     const tensor = tf.tidy(() => {
       let img = tf.browser.fromPixels(input);
-      // Resize to model expected input - we try to infer from model or default to 224
       img = tf.image.resizeBilinear(img, [224, 224]);
-      // Normalize if needed (most TFLite models expect 0-255 or 0-1)
-      // For now we pass as is, or normalize to 0-1 if it's float model
       return img.expandDims(0);
     });
 
@@ -236,3 +189,5 @@ class ModelManager {
 }
 
 export const modelManager = ModelManager.getInstance();
+
+
