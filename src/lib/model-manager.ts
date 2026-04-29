@@ -155,7 +155,7 @@ class ModelManager {
             {
               model: "https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/",
               model_id: modelId,
-              model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist/SmolLM2-135M-Instruct-q4f16_1-MLC-wasm.wasm",
+              model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist-v2/SmolLM2-135M-Instruct-q4f16_1-v1_0-webgpu.wasm",
               low_resource_required: true,
             }
           ]

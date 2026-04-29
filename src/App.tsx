@@ -24,20 +24,12 @@ const App: React.FC = () => {
   }, []);
 
   const checkSetup = async () => {
-    const allModels = [
-      { name: 'crop_doctor', url: 'https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite', label: 'CROP DOCTOR (Farm)' },
-      { name: 'health_scan', url: 'https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite', label: 'HEALTH SCAN (Body)' },
-      { name: 'SmolLM2-config', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/mlc-chat-config.json', label: 'SMOLLM CONFIG (Chat)' },
-      { name: 'SmolLM2-lib', url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist-v2/smollm2-135m-instruct-q4f16_1-v1_0-webgpu.wasm', label: 'SMOLLM ENGINE (WASM)' },
-      { name: 'SmolLM2-tokenizer', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/tokenizer.json', label: 'SMOLLM TOKENIZER' }
-    ];
-    
-    // Updated verification list for the Spark 4 hardware
+    // Verified list for the Spark 4 hardware
     const verifiedModels = [
       { name: 'crop_doctor', url: 'https://huggingface.co/rufatronics/crop_doctor/resolve/main/crop_doctor.tflite', label: 'CROP DOCTOR (Farm)' },
       { name: 'health_scan', url: 'https://huggingface.co/rufatronics/health_scan/resolve/main/health_scan.tflite', label: 'HEALTH SCAN (Body)' },
       { name: 'SmolLM2-config', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/mlc-chat-config.json', label: 'SMOLLM CONFIG (Chat)' },
-      { name: 'SmolLM2-lib', url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist/SmolLM2-135M-Instruct-q4f16_1-MLC-wasm.wasm', label: 'SMOLLM ENGINE (WASM)' },
+      { name: 'SmolLM2-lib', url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-dist-v2/SmolLM2-135M-Instruct-q4f16_1-v1_0-webgpu.wasm', label: 'SMOLLM ENGINE (WASM)' },
       { name: 'SmolLM2-tokenizer', url: 'https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q4f16_1-MLC/resolve/main/tokenizer.json', label: 'SMOLLM TOKENIZER' }
     ];
     
