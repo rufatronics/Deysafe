@@ -5,10 +5,5 @@
     "camera",
     "microphone",
     "geolocation"
-  ],
-  "majorCapabilities": [
-    "PWA Architecture",
-    "On-device AI",
-    "WebGPU Optimization"
   ]
 }
